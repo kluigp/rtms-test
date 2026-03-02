@@ -45,16 +45,14 @@ rtms.onWebhookEvent(({ event, payload }) => {
       deskshareStream,
     });
 
-    // Raw Opus: 48 kHz, stereo, 20 ms frames (960 samples/ch).
-    // For browser playback: send these chunks to the client and decode with opus-decoder (WASM), then play via Web Audio API — no server-side conversion needed.
     const audioParams = {
       contentType: rtms.AudioContentType.RAW_AUDIO,
-      codec: rtms.AudioCodec.OPUS,
-      sampleRate: rtms.AudioSampleRate.SR_48K,
-      channel: rtms.AudioChannel.STEREO,
+      codec: rtms.AudioCodec.L16,
+      sampleRate: rtms.AudioSampleRate.SR_16K,
+      channel: rtms.AudioChannel.MONO,
       dataOpt: rtms.AudioDataOption.AUDIO_MIXED_STREAM,
       duration: 20,
-      frameSize: 960,
+      frameSize: 320, // 16000 * 0.02
     };
 
     const videoParams = {
@@ -69,15 +67,35 @@ rtms.onWebhookEvent(({ event, payload }) => {
     client.setVideoParams(videoParams);
     client.setDeskshareParams(videoParams);
 
+    let carry = null; // holds 1 leftover byte between chunks (PCM16 alignment)
+
     client.onAudioData((data, size) => {
-      // Always normalize to Buffer before writing
-      const chunk = Buffer.isBuffer(data)
+      let chunk = Buffer.isBuffer(data)
         ? data
         : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 
-      //Optinal sanity check
-      if (size && chunk.length !== size) {
-        log(`Audio size mismatch: chunk=${chunk.length}, size=${size}`);
+      // ✅ Trust RTMS 'size' (bytes) if provided
+      if (typeof size === "number") {
+        if (size <= 0) return;
+        if (size > chunk.length) {
+          // clamp; don't read past buffer
+          size = chunk.length;
+        }
+        chunk = chunk.subarray(0, size);
+      }
+
+      // ✅ Drop/accumulate odd byte so PCM16 stays aligned
+      if (carry) {
+        chunk = Buffer.concat([carry, chunk]);
+        carry = null;
+      }
+      if (chunk.length === 1) {
+        carry = chunk; // wait for next chunk
+        return;
+      }
+      if (chunk.length % 2 === 1) {
+        carry = chunk.subarray(chunk.length - 1);
+        chunk = chunk.subarray(0, chunk.length - 1);
       }
 
       audioStream.write(chunk);
