@@ -45,14 +45,21 @@ rtms.onWebhookEvent(({ event, payload }) => {
       deskshareStream,
     });
 
+    // Raw Opus format (for ffmpeg/ffplay and conversion to .opus for online players):
+    //   Codec: Opus
+    //   Sample rate: 48000 Hz
+    //   Channels: 2 (stereo)
+    //   Frame duration: 20 ms (960 samples/ch @ 48k)
+    // Play locally: ffplay -f opus -ar 48000 -ac 2 audio_<streamId>.raw
+    // Convert to .opus (for online players): ffmpeg -f opus -ar 48000 -ac 2 -i audio_<streamId>.raw -c copy out.opus
     const audioParams = {
       contentType: rtms.AudioContentType.RAW_AUDIO,
       codec: rtms.AudioCodec.OPUS,
-      sampleRate: rtms.AudioSampleRate.SR_48K,     // ✅ required for OPUS
-      channel: rtms.AudioChannel.STEREO,           // or MONO
+      sampleRate: rtms.AudioSampleRate.SR_48K,
+      channel: rtms.AudioChannel.STEREO,
       dataOpt: rtms.AudioDataOption.AUDIO_MIXED_STREAM,
       duration: 20,
-      frameSize: 960,                              // samples/ch for 20ms @ 48k (often used for opus frame size)
+      frameSize: 960,
     };
 
     const videoParams = {

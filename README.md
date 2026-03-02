@@ -122,6 +122,27 @@ client.setDeskshareParams({
 });
 ```
 
+## 🔊 Playing the recorded audio
+
+The app writes **raw Opus** to `audio_<streamId>.raw`. Most online players do not accept raw binary Opus; they expect **Ogg Opus** (`.opus`) or WebM.
+
+**Format (for reference):** Opus, 48 kHz, stereo, 20 ms frames.
+
+- **Play locally (raw):**
+  ```bash
+  ffplay -f opus -ar 48000 -ac 2 logs/audio_<streamId>.raw
+  ```
+- **Convert to .opus for online players:**
+  ```bash
+  ffmpeg -f opus -ar 48000 -ac 2 -i logs/audio_<streamId>.raw -c copy output.opus
+  ```
+  Or use the helper script:
+  ```bash
+  chmod +x scripts/raw-to-opus.sh
+  ./scripts/raw-to-opus.sh logs/audio_<streamId>.raw output.opus
+  ```
+  Upload `output.opus` to any online audio player.
+
 ## 📞 Available Callbacks
 
 - `onJoinConfirm(reason)` - ✅ Join confirmation
