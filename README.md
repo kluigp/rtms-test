@@ -124,24 +124,27 @@ client.setDeskshareParams({
 
 ## 🔊 Playing the recorded audio
 
-The app writes **raw Opus** to `audio_<streamId>.raw`. Most online players do not accept raw binary Opus; they expect **Ogg Opus** (`.opus`) or WebM.
+The app writes **raw Opus** to `audio_<streamId>.raw` (e.g. `audio_abc123.raw`). Use the **actual filename** from your `logs/` folder—replace `<streamId>` with the real ID from `rtms_events.log` or the file list.
 
 **Format (for reference):** Opus, 48 kHz, stereo, 20 ms frames.
 
-- **Play locally (raw):**
+Most online players do not accept raw binary Opus; they expect **Ogg Opus** (`.opus`). **FFmpeg cannot read raw Opus** (no demuxer), so conversion uses **GStreamer**.
+
+- **Convert to .opus for online players (requires GStreamer):**
   ```bash
-  ffplay -f opus -ar 48000 -ac 2 logs/audio_<streamId>.raw
+  ./scripts/raw-to-opus.sh logs/audio_<STREAMID>.raw output.opus
   ```
-- **Convert to .opus for online players:**
+  Example: `./scripts/raw-to-opus.sh logs/audio_abc123.raw meeting.opus`  
+  Then upload `output.opus` (or `meeting.opus`) to any online audio player.
+
+- **Install GStreamer if needed:**
+  - Ubuntu/Debian: `sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`
+  - macOS: `brew install gstreamer`
+
+- **Play raw file locally (if your player supports it):**
   ```bash
-  ffmpeg -f opus -ar 48000 -ac 2 -i logs/audio_<streamId>.raw -c copy output.opus
+  gst-launch-1.0 filesrc location=logs/audio_<STREAMID>.raw ! opusparse ! opusdec ! autoaudiosink
   ```
-  Or use the helper script:
-  ```bash
-  chmod +x scripts/raw-to-opus.sh
-  ./scripts/raw-to-opus.sh logs/audio_<streamId>.raw output.opus
-  ```
-  Upload `output.opus` to any online audio player.
 
 ## 📞 Available Callbacks
 
