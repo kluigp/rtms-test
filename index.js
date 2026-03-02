@@ -45,9 +45,8 @@ rtms.onWebhookEvent(({ event, payload }) => {
       deskshareStream,
     });
 
-    // Raw Opus format (FFmpeg cannot read raw Opus; use GStreamer or scripts/raw-to-opus.sh):
-    //   Codec: Opus, 48000 Hz, stereo, 20 ms frames (960 samples/ch)
-    // Convert to .opus: ./scripts/raw-to-opus.sh logs/audio_<streamId>.raw out.opus
+    // Raw Opus: 48 kHz, stereo, 20 ms frames (960 samples/ch).
+    // For browser playback: send these chunks to the client and decode with opus-decoder (WASM), then play via Web Audio API — no server-side conversion needed.
     const audioParams = {
       contentType: rtms.AudioContentType.RAW_AUDIO,
       codec: rtms.AudioCodec.OPUS,

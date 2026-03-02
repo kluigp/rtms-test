@@ -124,27 +124,54 @@ client.setDeskshareParams({
 
 ## 🔊 Playing the recorded audio
 
-The app writes **raw Opus** to `audio_<streamId>.raw` (e.g. `audio_abc123.raw`). Use the **actual filename** from your `logs/` folder—replace `<streamId>` with the real ID from `rtms_events.log` or the file list.
+The app writes **raw Opus** (48 kHz, stereo, 20 ms frames). The RTMS SDK does **not** offer Ogg or other container output—only raw Opus.
 
-**Format (for reference):** Opus, 48 kHz, stereo, 20 ms frames.
+### Streaming to the browser (no conversion script)
 
-Most online players do not accept raw binary Opus; they expect **Ogg Opus** (`.opus`). **FFmpeg cannot read raw Opus** (no demuxer), so conversion uses **GStreamer**.
+In real-world setups you send the binary straight to the browser. **No server-side conversion is needed**: the browser decodes raw Opus with a WASM decoder and plays via the Web Audio API.
 
-- **Convert to .opus for online players (requires GStreamer):**
-  ```bash
-  ./scripts/raw-to-opus.sh logs/audio_<STREAMID>.raw output.opus
-  ```
-  Example: `./scripts/raw-to-opus.sh logs/audio_abc123.raw meeting.opus`  
-  Then upload `output.opus` (or `meeting.opus`) to any online audio player.
+1. **Server**: Keep current settings; stream each `onAudioData` chunk to the client (e.g. over WebSocket or your API).
+2. **Browser**: Use **[opus-decoder](https://www.npmjs.com/package/opus-decoder)** (or similar) to decode raw Opus frames to PCM, then play with `AudioContext`:
 
-- **Install GStreamer if needed:**
-  - Ubuntu/Debian: `sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`
-  - macOS: `brew install gstreamer`
+   ```javascript
+   import { OpusDecoder } from 'opus-decoder';
 
-- **Play raw file locally (if your player supports it):**
-  ```bash
-  gst-launch-1.0 filesrc location=logs/audio_<STREAMID>.raw ! opusparse ! opusdec ! autoaudiosink
-  ```
+   const decoder = new OpusDecoder();
+   await decoder.ready; // WASM loaded
+
+   const ctx = new AudioContext({ sampleRate: 48000 });
+   const queue = []; let nextStart = 0;
+
+   function playDecoded(channelData, samplesDecoded, sampleRate) {
+     const buffer = ctx.createBuffer(2, samplesDecoded, sampleRate);
+     buffer.getChannelData(0).set(channelData[0]);
+     buffer.getChannelData(1).set(channelData[1]);
+     const source = ctx.createBufferSource();
+     source.buffer = buffer;
+     source.connect(ctx.destination);
+     const start = Math.max(nextStart, ctx.currentTime);
+     source.start(start);
+     source.stop(start + buffer.duration);
+     nextStart = start + buffer.duration;
+   }
+
+   // For each raw Opus chunk received (e.g. from WebSocket):
+   const { channelData, samplesDecoded, sampleRate } = decoder.decodeFrame(opusChunk);
+   if (samplesDecoded > 0) playDecoded(channelData, samplesDecoded, sampleRate);
+   ```
+
+   Match the decoder to your stream: **48 kHz, stereo** (same as `index.js`). Run decoder in a Web Worker for best performance.
+
+### Converting to .opus for uploads (optional)
+
+For one-off playback in online players that only accept Ogg Opus, use the conversion script (requires GStreamer):
+
+```bash
+./scripts/raw-to-opus.sh logs/audio_<STREAMID>.raw output.opus
+```
+
+- **Install GStreamer:** Ubuntu/Debian: `sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad` · macOS: `brew install gstreamer`
+- **Play raw locally:** `gst-launch-1.0 filesrc location=logs/audio_<STREAMID>.raw ! opusparse ! opusdec ! autoaudiosink`
 
 ## 📞 Available Callbacks
 
